@@ -28,22 +28,34 @@ void comb::equalize(gr_complex* in,
 
     gr_complex pilot[4];
 
-    if (n < 2) {
-        pilot[0] = in[11];
-        pilot[1] = -in[25];
-        pilot[2] = in[39];
-        pilot[3] = in[53];
+    if (n == 0) { //sjbq
+        std::memcpy(d_H, in, 64 * sizeof(gr_complex));
+    } else if (n == 1) {
+        double signal = 0;
+        double noise = 0;
+        for (int i = 0; i < 64; i++) {
+            if ((i == 32) || (i < 6) || (i > 58)) {
+                continue;
+            }
+            noise += std::pow(std::abs(d_H[i] - in[i]), 2);
+            signal += std::pow(std::abs(d_H[i] + in[i]), 2);
+            d_H[i] += in[i];
+            d_H[i] /= LONG[i] * gr_complex(2, 0);
+        }
+
+        d_snr = 10 * std::log10(signal / noise / 2);
     } else {
-        gr_complex p = POLARITY[(n - 2) % 127];
-        pilot[0] = in[11] * p;
-        pilot[1] = in[25] * p;
-        pilot[2] = in[39] * p;
-        pilot[3] = in[53] * -p;
-    }
+       gr_complex p = POLARITY[(n - 2) % 127];
+       pilot[0] = in[11] * p;
+       pilot[1] = in[25] * p;
+       pilot[2] = in[39] * p;
+       pilot[3] = in[53] * -p;
+       gr_complex avg = (pilot[0] + pilot[1] + pilot[2] + pilot[3]) / gr_complex(4, 0);
 
-    gr_complex avg = (pilot[0] + pilot[1] + pilot[2] + pilot[3]) / gr_complex(4, 0);
-
-    for (int i = 0; i < 64; i++) {
+       for (int i = 0; i < 64; i++) {
+        if ((i == 32) || (i < 6) || (i > 58)) {
+            continue;
+        }
         gr_complex H;
         if (i <= 11) {
             H = gr_complex((11 - i) / 11.0, 0) * avg + gr_complex(i / 11.0, 0) * pilot[0];
@@ -60,25 +72,22 @@ void comb::equalize(gr_complex* in,
             H = gr_complex((64 - i) / 11.0, 0) * pilot[3] +
                 gr_complex((i - 53) / 11.0, 0) * avg;
         }
-
-        if (n == 0) {
-            d_H[i] = H;
-        } else {
-            d_H[i] = gr_complex(1 - alpha, 0) * d_H[i] + gr_complex(alpha, 0) * H;
-        }
-    }
-
-    int c = 0;
-    for (int i = 0; i < 64; i++) {
-        if ((i == 11) || (i == 25) || (i == 32) || (i == 39) || (i == 53) || (i < 6) ||
-            (i > 58)) {
-            continue;
-        } else {
-            symbols[c] = in[i] / d_H[i];
-            bits[c] = mod->decision_maker(&symbols[c]);
-            c++;
-        }
-    }
+     
+        d_H[i] = gr_complex(1 - alpha, 0) * d_H[i] + gr_complex(alpha, 0) * H;         
+      }
+      int c = 0;
+      for (int i = 0; i < 64; i++) {
+          if ((i == 11) || (i == 25) || (i == 32) || (i == 39) || (i == 53) || (i < 6) ||
+              (i > 58)) {
+              continue;
+          } else {
+              symbols[c] = in[i] / d_H[i];
+              bits[c] = mod->decision_maker(&symbols[c]);
+              c++;
+          }
+      }
+  }
 }
 
-double comb::get_snr() { return 42; }
+//double comb::get_snr() { return 42; }
+double comb::get_snr() { return d_snr; }

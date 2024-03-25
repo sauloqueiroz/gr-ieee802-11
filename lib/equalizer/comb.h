@@ -35,6 +35,7 @@ public:
     double get_snr();
 
 private:
+    double d_snr;
     const double alpha = 0.2;
 };
 
